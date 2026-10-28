@@ -1,0 +1,137 @@
+{
+  "model_version": "dhs-tanzania-dhs-2022-0.1",
+  "trained_on": "Tanzania DHS 2022 (DHS Program microdata, survey-weighted). Not validated on clinic patients.",
+  "label": "perinatal death (stillbirth 7+ months, or death in first 7 days)",
+  "unit": "pregnancies ending in the 60 months before interview (live births + stillbirths)",
+  "n_pregnancies": 10819,
+  "n_outcomes": 420,
+  "n_clusters": 628,
+  "label_breakdown": {
+    "none": 10399,
+    "early_neonatal": 224,
+    "stillbirth": 196
+  },
+  "features_used": [
+    "age_years",
+    "gravida",
+    "parity",
+    "prior_stillbirth"
+  ],
+  "features_not_in_dhs": [
+    "gestation_weeks",
+    "anc_visits",
+    "prior_preeclampsia",
+    "prior_csection",
+    "prior_pph",
+    "bp_sys",
+    "bp_dia",
+    "muac",
+    "danger_sign_count"
+  ],
+  "feature_coverage": {
+    "age_years": 1.0,
+    "gestation_weeks": 0.0,
+    "gravida": 1.0,
+    "parity": 1.0,
+    "anc_visits": 0.0,
+    "prior_preeclampsia": 0.0,
+    "prior_stillbirth": 1.0,
+    "prior_csection": 0.0,
+    "prior_pph": 0.0,
+    "bp_sys": 0.0,
+    "bp_dia": 0.0,
+    "muac": 0.0,
+    "danger_sign_count": 0.0
+  },
+  "held_out": "25% of survey clusters (v001), weighted by v005",
+  "test_auc": 0.579,
+  "test": {
+    "xgboost": {
+      "auc": 0.603,
+      "avg_precision": 0.0536,
+      "baseline_rate": 0.032,
+      "auc_95ci_cluster_bootstrap": [
+        0.542,
+        0.671
+      ],
+      "cv5_auc_by_fold": [
+        0.634,
+        0.556,
+        0.549,
+        0.588,
+        0.568
+      ],
+      "cv5_auc_mean": 0.579
+    },
+    "logistic_regression": {
+      "auc": 0.569,
+      "avg_precision": 0.058,
+      "baseline_rate": 0.032
+    },
+    "simple_rule_age_parity_stillbirth": {
+      "auc": 0.566,
+      "avg_precision": 0.0377,
+      "baseline_rate": 0.032
+    }
+  },
+  "test_bands": [
+    {
+      "band": "low",
+      "share_of_pregnancies": 0.694,
+      "outcome_rate": 0.0254,
+      "times_baseline": 0.79,
+      "share_of_all_outcomes": 0.551
+    },
+    {
+      "band": "medium",
+      "share_of_pregnancies": 0.271,
+      "outcome_rate": 0.0379,
+      "times_baseline": 1.18,
+      "share_of_all_outcomes": 0.321
+    },
+    {
+      "band": "high",
+      "share_of_pregnancies": 0.035,
+      "outcome_rate": 0.1187,
+      "times_baseline": 3.71,
+      "share_of_all_outcomes": 0.128
+    }
+  ],
+  "mean_abs_shap_test": {
+    "age_years": 0.0674,
+    "gestation_weeks": 0.0,
+    "gravida": 0.016,
+    "parity": 0.1172,
+    "anc_visits": 0.0,
+    "prior_preeclampsia": 0.0,
+    "prior_stillbirth": 0.0647,
+    "prior_csection": 0.0,
+    "prior_pph": 0.0,
+    "bp_sys": 0.0,
+    "bp_dia": 0.0,
+    "muac": 0.0,
+    "danger_sign_count": 0.0
+  },
+  "boost_rounds": 44,
+  "xgboost_version": "3.2.0",
+  "bands": {
+    "medium": 0.0412,
+    "high": 0.0485
+  },
+  "bands_rule": "medium = top 30% of training pregnancies by score, high = top 10%",
+  "features": [
+    "age_years",
+    "gestation_weeks",
+    "gravida",
+    "parity",
+    "anc_visits",
+    "prior_preeclampsia",
+    "prior_stillbirth",
+    "prior_csection",
+    "prior_pph",
+    "bp_sys",
+    "bp_dia",
+    "muac",
+    "danger_sign_count"
+  ]
+}

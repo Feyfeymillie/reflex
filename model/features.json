@@ -1,0 +1,18 @@
+{
+  "_note": "Order matters: the app builds the model input in this order. A real model.json must be trained on exactly these feature names (missing values allowed as NaN).",
+  "features": [
+    {"name": "age_years",          "sw": "Umri wa mama",                      "en": "Mother's age",               "unit": "miaka"},
+    {"name": "gestation_weeks",    "sw": "Umri wa mimba",                     "en": "Weeks pregnant",             "unit": "wiki"},
+    {"name": "gravida",            "sw": "Idadi ya mimba (pamoja na hii)",    "en": "Number of pregnancies",      "unit": ""},
+    {"name": "parity",             "sw": "Idadi ya waliozaliwa",              "en": "Previous births",            "unit": ""},
+    {"name": "anc_visits",         "sw": "Mahudhurio ya kliniki (ANC) mpaka sasa", "en": "ANC visits so far",    "unit": ""},
+    {"name": "prior_preeclampsia", "sw": "Kifafa cha mimba / presha mimba iliyopita", "en": "Pre-eclampsia in a past pregnancy", "unit": ""},
+    {"name": "prior_stillbirth",   "sw": "Mtoto kuzaliwa mfu awali",          "en": "Previous stillbirth",        "unit": ""},
+    {"name": "prior_csection",     "sw": "Upasuaji (C-section) awali",        "en": "Previous caesarean",         "unit": ""},
+    {"name": "prior_pph",          "sw": "Kutokwa damu nyingi baada ya kujifungua awali", "en": "Previous heavy bleeding after birth", "unit": ""},
+    {"name": "bp_sys",             "sw": "Shinikizo la damu (juu)",           "en": "Blood pressure (top)",       "unit": "mmHg"},
+    {"name": "bp_dia",             "sw": "Shinikizo la damu (chini)",         "en": "Blood pressure (bottom)",    "unit": "mmHg"},
+    {"name": "muac",               "sw": "Mzingo wa mkono (MUAC)",            "en": "Arm circumference (MUAC)",   "unit": "cm"},
+    {"name": "danger_sign_count",  "sw": "Idadi ya dalili za hatari",         "en": "Number of danger signs",     "unit": ""}
+  ]
+}

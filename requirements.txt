@@ -1,0 +1,6 @@
+xgboost
+numpy
+fastapi
+uvicorn[standard]
+jinja2
+psutil

@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+data/
+*.db
+*.db-*
+*.DTA
+*.dta
+*.zip
+*.exe
+*.msi
+*.pptx
+.env

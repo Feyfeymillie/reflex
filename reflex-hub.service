@@ -1,0 +1,14 @@
+[Unit]
+Description=RefleX hub web app
+After=network.target
+
+[Service]
+User=reflex
+WorkingDirectory=/home/reflex/reflex/prototype
+Environment=PATH=/home/reflex/reflex/venv/bin:/usr/bin:/bin
+ExecStart=/home/reflex/reflex/prototype/run.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
