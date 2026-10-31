@@ -13,6 +13,8 @@ All three modules work end to end on one shared record:
 | 2. Postpartum | Record the birth (creates the baby's record), EPDS 10 questions rule-scored, Q10 self-harm → same-day referral. A mother can start here with no pregnancy record | `app/epds.py` |
 | 3. Child development | Milestones by age (corrected for preterm), play ideas with a "We did it today" sticker chart, a full-screen picture game for the child, one fixed "talk to your CHW" rule. **No score, ever** | `app/child.py`, `frontend/src/components/ChildPlay.tsx` |
 
+**Staff sign-in (new):** every health worker has their own account; administrators manage accounts but cannot see patient records. See [`docs/AUTH.md`](docs/AUTH.md).
+
 Shared by all three: consent per person and module (enforced in the API, not just the screens), CHW
 Accept/Override-with-reason on every flag, referrals, `/dataset` page showing live model + RAM numbers.
 
@@ -41,21 +43,23 @@ Power cut: unsent answers stay on the phone (saved in the browser as you type) a
 `synchronous=FULL`. Rehearse the real plug-pull on the Pi; it has only been tested here as a process kill.
 
 ## Run on the Pi
-After `../pi-setup-tonight.md` steps 1–4 (venv with xgboost, fastapi, uvicorn, jinja2, psutil):
+After `../pi-setup-tonight.md` steps 1–4 (venv with xgboost, fastapi, uvicorn, jinja2, psutil), plus `pip install -r requirements.txt` for `argon2-cffi`:
 ```bash
 scp -r prototype reflex@reflex-hub.local:~/reflex/          # from the laptop
 ssh reflex@reflex-hub.local
 cd ~/reflex/prototype && source ~/reflex/venv/bin/activate
 # do NOT run model/train_synthetic_model.py: it overwrites the DHS model with the synthetic placeholder
+python -m app.manage create-admin admin --name "Your Name"   # once: the first administrator (see docs/AUTH.md)
 ./run.sh                                    # serves app + API on 0.0.0.0:8000
-python tests/smoke_test.py http://127.0.0.1:8000   # second ssh window; must end "ALL PASSED"
+# second ssh window: needs a CHW account, e.g. python -m app.manage create-chw smoke --name "Smoke Test"
+REFLEX_SMOKE_USER=smoke REFLEX_SMOKE_PASS='...' python tests/smoke_test.py http://127.0.0.1:8000   # must end "ALL PASSED"
 ```
 Start on boot (needed for the power-pull demo):
 ```bash
 sudo cp reflex-hub.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now reflex-hub
 ```
-The smoke test creates test mothers. Before the demo: `sudo systemctl stop reflex-hub && rm -f data/reflex.db* && sudo systemctl start reflex-hub`.
+The smoke test creates test mothers. Before the demo, erase the **demo** patients (staff accounts are kept): `python -m app.manage reset-demo-data`. Demo data only; never on real records. Do not `rm data/reflex.db*` any more: that also deletes the staff accounts.
 
 ## Changing the frontend (on a laptop, not the Pi)
 ```bash
@@ -100,7 +104,10 @@ with a message naming them. The frontend needs no change.
 | `app/web/` | built frontend (generated; don't edit) |
 | `frontend/` | frontend source |
 | `model/` | feature list, model trained on Tanzania DHS 2022 (`train_dhs_model.py`, report in `dhs_training_report.md`), old synthetic placeholder script |
-| `tests/smoke_test.py` | 35 API checks across all three modules, standard library only |
+| `app/auth.py`, `app/auth_routes.py`, `app/manage.py` | staff sign-in, roles, sessions; account routes; command-line administration |
+| `tests/smoke_test.py` | API checks across all three modules against a running hub (signs in as a CHW), standard library only |
+| `tests/test_auth.py`, `tests/test_workflows.py` | pytest suite (`pip install -r requirements-dev.txt`, `python -m pytest tests`) |
+| `docs/AUTH.md` | sign-in, roles, setup, HTTPS, demo reset |
 
 ## Known gaps (say these out loud, rubric 6b)
 - The risk model is trained on **Tanzania DHS 2022** (10,819 pregnancies, perinatal death). It is weak: cross-validated AUC 0.58, using only age, gravida, parity and prior stillbirth, because DHS has nothing else the app collects. BP, pre-eclampsia, PPH, MUAC and danger signs are handled by rules only. Not validated on clinic patients. See `model/dhs_training_report.md`.
@@ -108,6 +115,6 @@ with a message naming them. The frontend needs no change.
 - BP rules, EPDS cut-offs (10/13) and band thresholds need a clinician's sign-off.
 - The picture game's emoji look different on each phone brand; on very old Android phones some may show as boxes. Test on the team's demo phones.
 - The play log uses the Pi's local date: set the Pi's timezone to Africa/Dar_es_Salaam.
-- Single hub: no sync, no login, no SMS. Referral facilities are placeholders to fill per ward.
+- Single hub: no sync, no SMS. Staff sign-in exists, but the hub is plain HTTP: see "HTTP versus HTTPS" in `docs/AUTH.md` before real patient data. Referral facilities are placeholders to fill per ward.
 - MamaBot is a keyword matcher with fixed answers, not AI. It says so.
 - Module 3 autism screening uses the official **M-CHAT-R** items and scoring (16-30 months). The authors' permission is needed for electronic use beyond this demo, the Swahili items are a draft (use an approved translation), and the Follow-Up interview for the Medium band is not built. The five play games are not validated: results are saved for the CHW and never scored or referred.

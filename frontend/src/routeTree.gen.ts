@@ -10,13 +10,16 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as ChildrenRouteImport } from './routes/children'
 import { Route as DatasetRouteImport } from './routes/dataset'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PatientsRouteImport } from './routes/patients'
 import { Route as ReferralRouteImport } from './routes/referral'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AdminStaffRouteImport } from './routes/admin.staff'
 import { Route as ChildIdRouteImport } from './routes/child.$id'
 import { Route as MchatIdRouteImport } from './routes/mchat.$id'
 import { Route as PatientIdRouteImport } from './routes/patient.$id'
@@ -27,6 +30,11 @@ import { Route as PostpartumIdRouteImport } from './routes/postpartum.$id'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalysisRoute = AnalysisRouteImport.update({
@@ -49,6 +57,11 @@ const DatasetRoute = DatasetRouteImport.update({
   path: '/dataset',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatientsRoute = PatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
@@ -62,6 +75,11 @@ const ReferralRoute = ReferralRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminStaffRoute = AdminStaffRouteImport.update({
+  id: '/admin/staff',
+  path: '/admin/staff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChildIdRoute = ChildIdRouteImport.update({
@@ -97,13 +115,16 @@ const PostpartumIdRoute = PostpartumIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/children': typeof ChildrenRoute
   '/dataset': typeof DatasetRoute
+  '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/admin/staff': typeof AdminStaffRoute
   '/child/$id': typeof ChildIdRoute
   '/mchat/$id': typeof MchatIdRoute
   '/patient/$id': typeof PatientIdRoute
@@ -113,13 +134,16 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/children': typeof ChildrenRoute
   '/dataset': typeof DatasetRoute
+  '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/admin/staff': typeof AdminStaffRoute
   '/child/$id': typeof ChildIdRoute
   '/mchat/$id': typeof MchatIdRoute
   '/patient/$id': typeof PatientIdRoute
@@ -130,13 +154,16 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/children': typeof ChildrenRoute
   '/dataset': typeof DatasetRoute
+  '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/admin/staff': typeof AdminStaffRoute
   '/child/$id': typeof ChildIdRoute
   '/mchat/$id': typeof MchatIdRoute
   '/patient/$id': typeof PatientIdRoute
@@ -148,13 +175,16 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/analysis'
     | '/analytics'
     | '/children'
     | '/dataset'
+    | '/login'
     | '/patients'
     | '/referral'
     | '/register'
+    | '/admin/staff'
     | '/child/$id'
     | '/mchat/$id'
     | '/patient/$id'
@@ -164,13 +194,16 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/analysis'
     | '/analytics'
     | '/children'
     | '/dataset'
+    | '/login'
     | '/patients'
     | '/referral'
     | '/register'
+    | '/admin/staff'
     | '/child/$id'
     | '/mchat/$id'
     | '/patient/$id'
@@ -180,13 +213,16 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/analysis'
     | '/analytics'
     | '/children'
     | '/dataset'
+    | '/login'
     | '/patients'
     | '/referral'
     | '/register'
+    | '/admin/staff'
     | '/child/$id'
     | '/mchat/$id'
     | '/patient/$id'
@@ -197,13 +233,16 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   AnalysisRoute: typeof AnalysisRoute
   AnalyticsRoute: typeof AnalyticsRoute
   ChildrenRoute: typeof ChildrenRoute
   DatasetRoute: typeof DatasetRoute
+  LoginRoute: typeof LoginRoute
   PatientsRoute: typeof PatientsRoute
   ReferralRoute: typeof ReferralRoute
   RegisterRoute: typeof RegisterRoute
+  AdminStaffRoute: typeof AdminStaffRoute
   ChildIdRoute: typeof ChildIdRoute
   MchatIdRoute: typeof MchatIdRoute
   PatientIdRoute: typeof PatientIdRoute
@@ -219,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analysis': {
@@ -249,6 +295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DatasetRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patients': {
       id: '/patients'
       path: '/patients'
@@ -268,6 +321,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/staff': {
+      id: '/admin/staff'
+      path: '/admin/staff'
+      fullPath: '/admin/staff'
+      preLoaderRoute: typeof AdminStaffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/child/$id': {
@@ -317,13 +377,16 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   AnalysisRoute: AnalysisRoute,
   AnalyticsRoute: AnalyticsRoute,
   ChildrenRoute: ChildrenRoute,
   DatasetRoute: DatasetRoute,
+  LoginRoute: LoginRoute,
   PatientsRoute: PatientsRoute,
   ReferralRoute: ReferralRoute,
   RegisterRoute: RegisterRoute,
+  AdminStaffRoute: AdminStaffRoute,
   ChildIdRoute: ChildIdRoute,
   MchatIdRoute: MchatIdRoute,
   PatientIdRoute: PatientIdRoute,

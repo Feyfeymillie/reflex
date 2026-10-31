@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
@@ -16,10 +16,14 @@ import {
   Languages,
   Menu,
   X,
+  KeyRound,
+  LogOut,
+  UserCog,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
 import { Chatbot } from "./Chatbot";
+import { logout, useUser } from "@/lib/auth";
 
 import { setLang, t, useLang } from "@/lib/i18n";
 const nav = [
@@ -34,9 +38,20 @@ const nav = [
   { to: "/dataset", label: "Model & data", icon: Globe2 },
 ] as const;
 
+// Administrators manage staff accounts only; the hub refuses them every clinical route, so they get no clinical menu.
+const adminNav = [{ to: "/admin/staff", label: "Staff accounts", icon: UserCog }] as const;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   useLang();
   const loc = useLocation();
+  const user = useUser();
+  const navigate = useNavigate();
+  const isAdmin = user?.role === "admin";
+  const items = isAdmin ? adminNav : nav;
+  async function signOut() {
+    await logout();
+    navigate({ to: "/login" });
+  }
   const [dark, setDark] = useState(false);
   const lang = useLang();
   const [open, setOpen] = useState(false);
@@ -60,15 +75,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <Link to="/" className="flex items-center gap-2 px-5 py-5 border-b border-sidebar-border" onClick={() => setOpen(false)}>
+        <Link
+          to="/"
+          className="flex items-center gap-2 px-5 py-5 border-b border-sidebar-border"
+          onClick={() => setOpen(false)}
+        >
           <img src={logo} alt="RefleX" className="size-9" width={36} height={36} />
           <div className="leading-tight">
             <div className="font-semibold">RefleX</div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("Mother & child • Offline")}</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              {t("Mother & child • Offline")}
+            </div>
           </div>
         </Link>
         <nav className="flex-1 p-3 space-y-1">
-          {nav.map((n) => {
+          {items.map((n) => {
             const active = loc.pathname === n.to || (n.to !== "/" && loc.pathname.startsWith(n.to));
             const Icon = n.icon;
             return (
@@ -91,7 +112,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="p-3 border-t border-sidebar-border text-xs text-muted-foreground">
           <div className="flex items-center gap-2 px-2 py-2 rounded-md bg-success/10 text-success">
-            <span className="size-2 rounded-full bg-success animate-pulse" />{' '}{t("Saved on the RefleX hub")}
+            <span className="size-2 rounded-full bg-success animate-pulse" />{" "}
+            {t("Saved on the RefleX hub")}
           </div>
         </div>
       </aside>
@@ -106,7 +128,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <WifiOff className="size-4 text-accent" />
             <span>{t("No internet needed • Records saved on the RefleX hub")}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            {user && (
+              <>
+                <Link
+                  to="/account"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-secondary"
+                  title={t("My account")}
+                >
+                  <KeyRound className="size-4" />
+                  <span className="hidden sm:block leading-tight text-left">
+                    <span className="block font-medium">{user.fullName}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {isAdmin ? t("Administrator") : t("Health worker")}
+                    </span>
+                  </span>
+                </Link>
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium hover:bg-secondary"
+                  title={t("Sign out")}
+                >
+                  <LogOut className="size-4" />{" "}
+                  <span className="hidden sm:inline">{t("Sign out")}</span>
+                </button>
+              </>
+            )}
             <button
               onClick={() => setLang(lang === "sw" ? "en" : "sw")}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium hover:bg-secondary"
@@ -125,8 +172,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 min-w-0">{children}</main>
       </div>
-      <div className="print:hidden"><Chatbot /></div>
-      {open && <div className="print:hidden fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setOpen(false)} />}
+      {!isAdmin && (
+        <div className="print:hidden">
+          <Chatbot />
+        </div>
+      )}
+      {open && (
+        <div
+          className="print:hidden fixed inset-0 bg-black/40 z-30 lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }
