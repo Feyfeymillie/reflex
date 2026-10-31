@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Baby, Check, ClipboardCheck, Gamepad2, Lightbulb, MessageCircleHeart, Puzzle } from "lucide-react";
 import { PictureGame, StickerChart } from "@/components/ChildPlay";
+import { BirthCard, type NewbornSummary } from "@/components/BirthCard";
 import { AppShell } from "@/components/AppShell";
 import { ConsentCard } from "@/components/ConsentCard";
 import { api, errorText } from "@/lib/api";
@@ -24,10 +25,11 @@ type Child = {
   mchatAge: { min: number; max: number };
   mchat: { assessmentId: string; date: string; score: number; band: "low" | "medium" | "high"; ageMonths: number; actionSw: string; actionEn: string; referral: unknown }[];
   tasks: { date: string; task: string; accuracy: number; seconds: number; assistance: string; caution: boolean; note: string }[];
+  newborn: NewbornSummary;
 };
 const BAND_TXT = { low: "Low likelihood", medium: "Medium likelihood: Follow-Up needed", high: "High likelihood: refer" } as const;
 const TASK_TXT: Record<string, string> = { "feature-match": "Picture match", memory: "Where did it hide?", "joint-attention": "Look where I look", "target-pop": "Bubble pop", "play-observation": "Play together checklist" };
-type Guidance = { advise_contact_chw: boolean; message_sw: string; message_en: string; overdue: string[]; practising: string[]; child: Child };
+type Guidance = { advise_contact_chw: boolean; watch_closely: boolean; message_sw: string; message_en: string; overdue: string[]; practising: string[]; child: Child };
 
 function ChildPage() {
   useLang();
@@ -87,6 +89,8 @@ function ChildPage() {
           </div>
         </div>
 
+        {c.consent && <BirthCard childId={c.id} nb={c.newborn} onSaved={(k) => setC(k as Child)} />}
+
         {!c.consent ? (
           <div className="space-y-3">
             <ConsentCard module="child_dev" value={consent} onChange={setConsent} />
@@ -126,6 +130,7 @@ function ChildPage() {
               <div className={`rounded-2xl p-6 border-2 ${g.advise_contact_chw ? "border-accent bg-accent/10" : "border-success/40 bg-success/5"}`}>
                 <div className="flex items-center gap-2 font-semibold"><MessageCircleHeart className="size-5" /> {g.advise_contact_chw ? t("Talk to your CHW") : t("Keep going")}</div>
                 <p className="mt-2">{bi(g.message_sw, g.message_en)}</p>
+                {g.watch_closely && <p className="mt-2 text-xs text-muted-foreground">{t("This child is followed more closely because of the birth record, so any milestone not yet reached counts.")}</p>}
               </div>
             )}
 

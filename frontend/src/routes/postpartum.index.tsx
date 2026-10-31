@@ -7,6 +7,7 @@ import { ConsentCard } from "@/components/ConsentCard";
 import { BandBadge, BAND_LABEL } from "@/components/ChwDecision";
 import { Section, TF } from "@/components/anc-fields";
 import { BirthFields, OUTCOME, PLACE } from "@/components/BirthFields";
+import { emptyNewborn, newbornPayload } from "@/components/NewbornFields";
 import { api, errorText } from "@/lib/api";
 import { finalBand, latest, loadPatients, type Consent, type Patient } from "@/lib/store";
 
@@ -81,6 +82,7 @@ function PostnatalEntry() {
   const [f, setF] = useState({ name: "", age: "", village: "", phone: "", outcome: "", date: "", place: "", babyName: "", babySex: "", gestationAtBirthWeeks: "" });
   const [consent, setConsent] = useState<Consent>({ care: false });
   const [busy, setBusy] = useState(false);
+  const [nb, setNb] = useState(emptyNewborn);
   const set = (k: keyof typeof f) => (v: string) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e: React.FormEvent) {
@@ -91,7 +93,8 @@ function PostnatalEntry() {
       const p = await api<Patient>("POST", "/api/v1/postnatal-entry", {
         name: f.name, age: parseInt(f.age, 10), village: f.village, phone: f.phone, consent,
         birth: { outcome: OUTCOME[f.outcome], date: f.date, place: PLACE[f.place], babyName: f.babyName,
-                 babySex: f.babySex.toLowerCase() || undefined, gestationAtBirthWeeks: f.gestationAtBirthWeeks || undefined },
+                 babySex: f.babySex.toLowerCase() || undefined, gestationAtBirthWeeks: f.gestationAtBirthWeeks || undefined,
+                 newborn: newbornPayload(nb) },
       });
       toast.success(t("Mother registered after delivery"));
       nav({ to: "/postpartum/$id", params: { id: p.id } });
@@ -109,7 +112,7 @@ function PostnatalEntry() {
         <TF label="Village" value={f.village} onChange={set("village")} />
         <TF label="Phone (optional)" value={f.phone} onChange={set("phone")} />
       </Section>
-      <BirthFields f={f} set={set} />
+      <BirthFields f={f} set={set} nb={nb} setNb={setNb} />
       <button disabled={busy || !consent.care} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-medium disabled:opacity-50">
         <Save className="size-4" /> {busy ? t("Saving…") : t("Register and continue to EPDS")}
       </button>

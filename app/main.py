@@ -13,7 +13,7 @@ import psutil
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import child, db, epds, mchat, pregnancy as preg
+from . import child, db, epds, mchat, newborn, pregnancy as preg
 
 HERE = Path(__file__).resolve().parent
 WEB = Path(os.environ.get("REFLEX_WEB", HERE / "web"))
@@ -361,6 +361,9 @@ def _record_birth(con, pid, b):
     if ga is not None and not 20 <= ga <= 44:
         raise ApiError(422, "Wiki za mimba wakati wa kujifungua: 20 hadi 44. / Weeks at birth must be 20 to 44.")
     place = b.get("place") if b.get("place") in ("facility", "home", "en_route") else None
+    nb, nb_errors = newborn.validate(b.get("newborn") or {})
+    if nb_errors and outcome == "live_birth":
+        raise ApiError(422, nb_errors)
     ts = db.now()
     if pr is None or pr["outcome"] != "ongoing":  # mother entering at module 2: retrospective pregnancy row
         preg_id = db.new_id()
@@ -379,7 +382,41 @@ def _record_birth(con, pid, b):
                        mother_person_id, gestation_at_birth_weeks, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     (kid, m["household_id"], "child", name, when, 0,
                      b.get("babySex") if b.get("babySex") in ("female", "male") else None, pid, ga, ts))
+        if not newborn.is_empty(nb):
+            _save_newborn(con, kid, nb, preg_id, place, ts)
     return kid
+
+
+def _save_newborn(con, kid, nb, preg_id, place, ts):
+    """Birth record of the baby: one 'newborn' encounter, one observation per field. The latest encounter wins."""
+    enc = db.new_id()
+    con.execute("""INSERT INTO encounter (encounter_id, person_id, pregnancy_id, module, started_at, ended_at, completed)
+                   VALUES (?,?,?,?,?,?,1)""", (enc, kid, preg_id, "newborn", ts, ts))
+    rows = newborn.observations(nb) + ([("NB_PLACE", place)] if place else [])
+    for code, v in rows:
+        con.execute("INSERT INTO observation VALUES (?,?,?,?,?,?)", (db.new_id(), enc, code, v, nb["source"] or "chw_measured", ts))
+
+
+def _newborn_json(con, k):
+    """Summary of the birth record + the 'watch closely' flag. Preterm alone can set the flag, even with no Apgar."""
+    enc = db.one(con, """SELECT encounter_id FROM encounter WHERE person_id=? AND module='newborn'
+                         ORDER BY started_at DESC, rowid DESC LIMIT 1""", k["person_id"])
+    obs = {}
+    if enc:
+        for r in db.all_(con, "SELECT code, value, source FROM observation WHERE encounter_id=? ORDER BY rowid", enc["encounter_id"]):
+            obs[r["code"]] = r["value"]
+            obs["_source"] = r["source"]
+    clean = newborn.from_observations(obs)
+    place = obs.get("NB_PLACE")
+    if place is None and k["mother_person_id"]:
+        pr = db.one(con, """SELECT delivery_place FROM pregnancy WHERE mother_id=? AND delivery_date=?
+                            ORDER BY created_at DESC LIMIT 1""", k["mother_person_id"], k["date_of_birth"])
+        place = pr["delivery_place"] if pr else None
+    out = newborn.assess(clean, k["gestation_at_birth_weeks"], place)
+    out["recorded"] = enc is not None
+    out["source"] = obs.get("_source") if enc else None
+    out["place"] = place
+    return out
 
 
 @app.post("/api/v1/patients/{pid}/birth")
@@ -481,6 +518,7 @@ def _child_json(con, cid):
             "mother": {"id": mother["person_id"], "name": mother["full_name"]} if mother else None,
             "consent": db.has_care_consent(con, cid, "child_dev"),
             "plan": child.plan(months), "lastAnswers": last, "play": _play_json(con, cid),
+            "newborn": _newborn_json(con, k),
             "mchat": _mchat_list(con, cid), "tasks": _task_list(con, cid),
             "mchatAge": {"min": mchat.AGE_MIN, "max": mchat.AGE_MAX},
             "history": [{"code": e["content_code"], "trigger": e["trigger"], "adviseChw": bool(e["advised_contact_chw"]),
@@ -569,7 +607,7 @@ async def milestones(cid: str, request: Request):
         db.require_consent(con, cid, "child_dev")
         k = _person(con, cid, "child")
         months, _ = child.age_months(k["date_of_birth"], k["gestation_at_birth_weeks"])
-        g = child.guidance(months, answers, bool(b.get("lostSkill")))
+        g = child.guidance(months, answers, bool(b.get("lostSkill")), _newborn_json(con, k)["watchClosely"])
         enc, ts = db.new_id(), db.now()
         con.execute("BEGIN")
         con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed)
@@ -587,6 +625,33 @@ async def milestones(cid: str, request: Request):
                         (db.new_id(), cid, enc, "MSG_TALK_TO_CHW", "milestone_not_yet", 1, ts))
         con.execute("COMMIT")
         return {**g, "child": _child_json(con, cid)}
+    finally:
+        con.close()
+
+
+@app.get("/api/v1/newborn/questions")
+def newborn_questions():
+    return newborn.questions()
+
+
+@app.post("/api/v1/children/{cid}/newborn")
+async def newborn_record(cid: str, request: Request):
+    """Body: {apgar1, apgar5 (whole number 0-10, or {appearance, pulse, grimace, activity, respiration} each 0-2),
+    breathingHelp, birthWeightGrams, source}. For a baby whose birth was recorded without these, or to correct them."""
+    b = await request.json()
+    nb, errors = newborn.validate(b)
+    if errors:
+        raise ApiError(422, errors)
+    if newborn.is_empty(nb):
+        raise ApiError(422, ["Weka angalau taarifa moja. / Enter at least one value."])
+    con = db.connect()
+    try:
+        db.require_consent(con, cid, "child_dev")
+        k = _person(con, cid, "child")
+        con.execute("BEGIN")
+        _save_newborn(con, cid, nb, None, None, db.now())
+        con.execute("COMMIT")
+        return _child_json(con, cid)
     finally:
         con.close()
 
