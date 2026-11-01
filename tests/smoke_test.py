@@ -134,8 +134,10 @@ check(s == 403, "child guidance needs the mother's consent for the child")
 call("POST", f"/api/v1/persons/{kid}/consent", {"module": "child_dev", "care": True})
 prev = c["plan"]["previous"]
 cur = c["plan"]["current"]
+check(c["newborn"]["watchClosely"] and [r["code"] for r in c["newborn"]["reasons"]] == ["PRETERM"],
+      "preterm baby (34 weeks) is marked 'watch closely' even with no Apgar recorded")
 s, g = call("POST", f"/api/v1/children/{kid}/milestones", {"answers": {m["code"]: "yes" for m in prev} | {cur[0]["code"]: "not_yet"}})
-check(s == 200 and not g["advise_contact_chw"], "not-yet on current age only → activities, no CHW message")
+check(s == 200 and g["advise_contact_chw"] and g["watch_closely"], "watch-closely child: a not-yet on the current age → talk to CHW")
 s, g = call("POST", f"/api/v1/children/{kid}/milestones", {"answers": {prev[0]["code"]: "not_yet"}} if prev else {"answers": {}, "lostSkill": True})
 check(g["advise_contact_chw"] and "score" not in g and "band" not in g, "overdue milestone → talk to CHW, and no score anywhere")
 
@@ -180,6 +182,50 @@ s, r = call("POST", f"/api/v1/children/{tod}/mchat", {"answers": {c: flip(v) for
 check(r["score"] == 20 and r["band"] == "high" and r["child"]["mchat"][0]["referral"], "all at-risk → 20, high, referral")
 s, _ = call("POST", f"/api/v1/children/{tod}/mchat", {"answers": {"MCHAT_Q1": "yes"}})
 check(s == 422, "incomplete M-CHAT-R rejected")
+
+# 11b. term toddler: the ordinary rule (a not-yet on the current age band only gets activities)
+s, t = call("GET", f"/api/v1/children/{tod}")
+check(not t["newborn"]["watchClosely"] and not t["newborn"]["recorded"], "term baby with no birth record → not watch closely")
+s, g = call("POST", f"/api/v1/children/{tod}/milestones", {"answers": {m["code"]: "yes" for m in t["plan"]["previous"]}
+                                                          | {t["plan"]["current"][0]["code"]: "not_yet"}})
+check(s == 200 and not g["advise_contact_chw"], "not-yet on current age only → activities, no CHW message")
+
+# 11c. module 3a: newborn birth record (Apgar, golden minute, birth weight). Rules, never a diagnosis.
+s, q = call("GET", "/api/v1/newborn/questions")
+check(s == 200 and [x["key"] for x in q["signs"]] == ["appearance", "pulse", "grimace", "activity", "respiration"]
+      and all([o["score"] for o in x["options"]] == [0, 1, 2] for x in q["signs"]), "Apgar: 5 signs, each 0/1/2")
+born_nb = (date.today() - timedelta(days=3)).isoformat()
+parts5 = {"appearance": 1, "pulse": 2, "grimace": 1, "activity": 1, "respiration": 1}
+s, b = call("POST", "/api/v1/postnatal-entry", {"name": "Rehema Juma", "age": 22, "village": "Kibaha", "consent": {"care": True},
+                                                "birth": {"outcome": "live_birth", "date": born_nb, "place": "home", "babySex": "male",
+                                                          "gestationAtBirthWeeks": 39,
+                                                          "newborn": {"apgar1": 3, "apgar5": parts5, "breathingHelp": "bag_mask",
+                                                                      "birthWeightGrams": 3100, "source": "birth_attendant"}}})
+check(s == 200, "birth recorded with Apgar parts + golden-minute help")
+nbk = b["children"][0]["id"]
+s, n = call("GET", f"/api/v1/children/{nbk}")
+nb = n["newborn"]
+check(nb["recorded"] and nb["apgar1"] == 3 and nb["apgar5"] == 6 and nb["apgar5Parts"] == parts5
+      and nb["apgar1Band"] == "low" and nb["apgar5Band"] == "moderate", "Apgar totals from parts: 1 min 3 (low), 5 min 6 (moderate)")
+check(nb["watchClosely"] and {r["code"] for r in nb["reasons"]} == {"APGAR5_LOW", "RESUSCITATED"} and nb["clinicCheck"],
+      "low 5-min Apgar + bag-mask at a home birth → watch closely + clinic check")
+check("score" not in nb and "band" not in nb and "diagnos" in nb["messageEn"], "newborn summary: no score/band, says it is not a diagnosis")
+s, b = call("POST", f"/api/v1/patients/{b['id']}/birth", {"outcome": "live_birth", "date": born_nb, "newborn": {"apgar5": 11}})
+check(s == 422, "Apgar above 10 rejected")
+s, b = call("POST", "/api/v1/postnatal-entry", {"name": "Bad Apgar", "age": 22, "consent": {"care": True},
+                                                "birth": {"outcome": "live_birth", "date": born_nb,
+                                                          "newborn": {"apgar5": {"appearance": 3, "pulse": 2, "grimace": 1, "activity": 1, "respiration": 1}}}})
+check(s == 422, "Apgar sign scored 3 rejected (and nothing saved)")
+s, _ = call("POST", f"/api/v1/children/{tod}/newborn", {"apgar1": 8, "apgar5": 9, "breathingHelp": "none", "birthWeightGrams": 3300,
+                                                         "source": "clinic_card"})
+s, t = call("GET", f"/api/v1/children/{tod}")
+check(s == 200 and t["newborn"]["apgar5"] == 9 and t["newborn"]["apgar5Band"] == "reassuring" and not t["newborn"]["watchClosely"]
+      and t["newborn"]["source"] == "clinic_card", "Apgar added later from the clinic card: 9 → reassuring, no flag")
+s, t = call("POST", f"/api/v1/children/{tod}/newborn", {"birthWeightGrams": 2100})
+check(s == 200 and [r["code"] for r in t["newborn"]["reasons"]] == ["LOW_BIRTH_WEIGHT"] and not t["newborn"]["clinicCheck"],
+      "correction: latest record wins; low birth weight alone → watch closely, no clinic check")
+s, _ = call("POST", f"/api/v1/children/{nbk}/newborn", {"apgar5": 8})
+check(s == 403, "adding a newborn record later needs child consent")
 
 # 12. module 3c: play tasks are stored for the CHW, never scored or referred
 s, k = call("POST", f"/api/v1/children/{tod}/tasks", {"task": "memory", "accuracy": 33, "seconds": 40, "assistance": "Verbal Prompt",

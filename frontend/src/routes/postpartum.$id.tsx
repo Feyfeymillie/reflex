@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { ConsentCard } from "@/components/ConsentCard";
 import { BandBadge, BAND_LABEL, ChwDecision } from "@/components/ChwDecision";
 import { BirthFields, OUTCOME, PLACE } from "@/components/BirthFields";
+import { emptyNewborn, newbornPayload } from "@/components/NewbornFields";
 import { api, errorText } from "@/lib/api";
 import { useDraft, clearDraft } from "@/lib/draft";
 import { fetchPatient, giveConsent, type Band, type Consent, type Patient } from "@/lib/store";
@@ -94,18 +95,20 @@ function BirthForm({ patient, onDone }: { patient: Patient; onDone: (p: Patient)
   useLang();
   const [f, setF] = useState({ outcome: "", date: "", place: "", babyName: "", babySex: "", gestationAtBirthWeeks: "" });
   const set = (k: keyof typeof f) => (v: string) => setF((s) => ({ ...s, [k]: v }));
+  const [nb, setNb] = useState(emptyNewborn);
   async function save() {
     try {
       onDone(await api<Patient>("POST", `/api/v1/patients/${patient.id}/birth`, {
         outcome: OUTCOME[f.outcome], date: f.date, place: PLACE[f.place], babyName: f.babyName,
         babySex: f.babySex.toLowerCase() || undefined, gestationAtBirthWeeks: f.gestationAtBirthWeeks || undefined,
+        newborn: newbornPayload(nb),
       }));
       toast.success(t("Birth recorded. The baby now has their own record linked to the mother."));
     } catch (e) { toast.error(errorText(e)); }
   }
   return (
     <div className="space-y-3">
-      <BirthFields f={f} set={set} step="1" />
+      <BirthFields f={f} set={set} step="1" nb={nb} setNb={setNb} />
       <button onClick={save} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-medium"><Save className="size-4" />{' '}{t("Record birth")}</button>
     </div>
   );

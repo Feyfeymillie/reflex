@@ -113,20 +113,25 @@ def plan(months):
     }
 
 
-def guidance(months, answers, lost_skill):
+def guidance(months, answers, lost_skill, watch_closely=False):
     """The one fixed rule. answers: {code: 'yes'|'not_yet'}.
 
     Talk to the CHW if the child has lost a skill they had, or has not yet done a milestone from the
     PREVIOUS age band (i.e. it is overdue by a full step). A not-yet on the current band only gets
     activities: most children reach these milestones by this age, and many reach them a little later.
+
+    A child marked "watch closely" by the birth record (newborn.assess: low 5-minute Apgar, needed
+    breathing help, low birth weight or preterm) is held to a tighter rule: any not-yet, current band
+    included, means talk to the CHW. This brings follow-up forward; it is not a diagnosis.
     """
     p = plan(months)
     prev_codes = {m["code"] for m in p["previous"]}
     overdue = [c for c, v in answers.items() if v == "not_yet" and c in prev_codes]
     practising = [c for c, v in answers.items() if v == "not_yet" and c not in prev_codes]
-    advise = bool(lost_skill or overdue)
+    advise = bool(lost_skill or overdue or (watch_closely and practising))
     return {
         "advise_contact_chw": advise,
+        "watch_closely": bool(watch_closely),
         "overdue": overdue,
         "practising": practising,
         "message_sw": ("Ongea na CHW au kliniki kuhusu ukuaji wa mtoto wako. Hii si utambuzi; ni hatua ya kupata ushauri mapema."
