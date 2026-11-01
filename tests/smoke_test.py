@@ -1,23 +1,28 @@
 """End-to-end API smoke test against a running hub. Standard library only, so it runs on the Pi as is.
 
-    python tests/smoke_test.py http://127.0.0.1:8000
+    REFLEX_SMOKE_USER=smoke REFLEX_SMOKE_PASS='...' python tests/smoke_test.py http://127.0.0.1:8000
 
-It creates test mothers. Wipe the database before a demo (see README).
+It signs in as a CHW first (create one with `python -m app.manage create-chw smoke --name "Smoke Test"`; an
+administrator account cannot reach clinical routes, by design). It creates test mothers: wipe demo data before
+a demo with `python -m app.manage reset-demo-data`.
 """
+import http.cookiejar
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from datetime import date, timedelta
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))  # keeps the session cookie
 
 
 def call(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
-    r = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"})
+    r = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json", "X-Reflex": "1"})
     try:
-        with urllib.request.urlopen(r) as resp:
+        with OPENER.open(r) as resp:
             raw = resp.read().decode()
             return resp.status, json.loads(raw) if raw.startswith(("{", "[")) else raw
     except urllib.error.HTTPError as e:
@@ -39,13 +44,22 @@ def register(name, age, rch4, checkin, consent=CONSENT):
                                              "rch4": rch4, "consent": consent, "checkIn": checkin})
 
 
+# 0. every clinical route is closed to anonymous visitors, then sign in as a CHW
+s, _ = call("GET", "/api/v1/patients")
+check(s == 401, "anonymous request to /api/v1/patients is refused (401)")
+USER, PASS = os.environ.get("REFLEX_SMOKE_USER"), os.environ.get("REFLEX_SMOKE_PASS")
+if not USER or not PASS:
+    sys.exit("Set REFLEX_SMOKE_USER and REFLEX_SMOKE_PASS to a CHW account (python -m app.manage create-chw ...).")
+s, b = call("POST", "/api/v1/auth/login", {"username": USER, "password": PASS})
+check(s == 200 and b["user"]["role"] == "chw" and not b["user"]["mustChangePassword"], "CHW signed in (a CLI-created CHW has no forced password change)")
+
 # 1. SPA is served, unknown API paths are JSON 404s
 s, body = call("GET", "/")
 check(s == 200 and "<div id=\"root\">" in body, "frontend index.html served")
 s, body = call("GET", "/patients")
 check(s == 200 and "<div id=\"root\">" in body, "client route falls back to index.html")
 s, _ = call("GET", "/api/v1/nope")
-check(s == 404, "unknown API path is 404")
+check(s == 404, "unknown API path is 404 (once signed in)")
 
 # 2. validation and consent
 s, b = register("Mama Mdogo", 7, {}, {"bloodPressure": "120/80"})
@@ -222,4 +236,7 @@ check(s in (400, 422), "unknown play task rejected")
 
 s, info = call("GET", "/api/v1/status")
 check(info["appRamMb"] > 0, f"status: app RAM {info['appRamMb']} MB, model load {info['modelLoadMs']} ms")
+call("POST", "/api/v1/auth/logout")
+s, _ = call("GET", "/api/v1/patients")
+check(s == 401, "after sign-out the session no longer works")
 print("ALL PASSED")

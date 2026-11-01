@@ -139,3 +139,47 @@ CREATE TABLE IF NOT EXISTS play_log (
   created_at      TEXT NOT NULL,
   UNIQUE (child_person_id, content_code, done_on)
 );
+
+-- ============================================================================================
+-- Staff authentication (separate from `person`, which holds mothers, children and caregivers).
+-- Two roles only: 'chw' (clinical work) and 'admin' (staff accounts only; no clinical access).
+-- Staff rows are never deleted: accounts are deactivated, so attribution on clinical rows stays valid.
+-- Columns that attribute clinical rows to staff (encounter.staff_id, consent.recorded_by_staff_id,
+-- review.reviewed_by_staff_id, referral.status_updated_by_staff_id, person.created_by_staff_id)
+-- are added by db._migrate() with ALTER TABLE ... ADD COLUMN, so existing databases keep all data.
+-- ============================================================================================
+
+CREATE TABLE IF NOT EXISTS staff_user (
+  staff_id      TEXT PRIMARY KEY,
+  username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  full_name     TEXT NOT NULL,
+  role          TEXT NOT NULL CHECK (role IN ('chw','admin')),
+  password_hash TEXT NOT NULL,
+  is_active     INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+  must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0,1)),
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  last_login_at TEXT,
+  created_by_staff_id TEXT REFERENCES staff_user(staff_id)
+);
+
+-- Only a SHA-256 of the session token is stored, so a copy of the database cannot be used to sign in.
+CREATE TABLE IF NOT EXISTS staff_session (
+  session_hash TEXT PRIMARY KEY,
+  staff_id     TEXT NOT NULL REFERENCES staff_user(staff_id),
+  created_at   TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  expires_at   TEXT NOT NULL            -- absolute maximum lifetime
+);
+CREATE INDEX IF NOT EXISTS staff_session_staff ON staff_session(staff_id);
+
+-- Failed and successful sign-in attempts, for lockout. Pruned automatically after a day.
+CREATE TABLE IF NOT EXISTS login_attempt (
+  attempt_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  username     TEXT NOT NULL,
+  ip           TEXT,
+  success      INTEGER NOT NULL,
+  attempted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_attempt_user ON login_attempt(username, attempted_at);
+CREATE INDEX IF NOT EXISTS login_attempt_ip ON login_attempt(ip, attempted_at);

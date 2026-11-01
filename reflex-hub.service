@@ -6,6 +6,8 @@ After=network.target
 User=reflex
 WorkingDirectory=/home/reflex/reflex/prototype
 Environment=PATH=/home/reflex/reflex/venv/bin:/usr/bin:/bin
+# Set to 1 ONLY when the hub is served over HTTPS (see docs/AUTH.md); browsers drop Secure cookies on plain HTTP.
+#Environment=REFLEX_COOKIE_SECURE=1
 ExecStart=/home/reflex/reflex/prototype/run.sh
 Restart=always
 RestartSec=2

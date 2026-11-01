@@ -27,9 +27,33 @@ def connect():
     return con
 
 
+# Additive migrations: columns added after the first release. SQLite has no "ADD COLUMN IF NOT EXISTS",
+# so each one is checked with PRAGMA table_info first. Nothing is dropped, rewritten or backfilled.
+# Rows written before authentication existed keep NULL here, which means "recorded before staff accounts".
+ADDED_COLUMNS = (
+    ("person", "created_by_staff_id", "TEXT REFERENCES staff_user(staff_id)"),
+    ("consent", "recorded_by_staff_id", "TEXT REFERENCES staff_user(staff_id)"),
+    ("encounter", "staff_id", "TEXT REFERENCES staff_user(staff_id)"),
+    ("review", "reviewed_by_staff_id", "TEXT REFERENCES staff_user(staff_id)"),
+    ("referral", "status_updated_by_staff_id", "TEXT REFERENCES staff_user(staff_id)"),
+)
+
+
+def _migrate(con):
+    for table, column, ddl in ADDED_COLUMNS:
+        have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+        if column not in have:
+            try:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+            except sqlite3.OperationalError as e:  # another process added it between the check and the ALTER
+                if "duplicate column" not in str(e).lower():
+                    raise
+
+
 def init():
     con = connect()
     con.executescript((Path(__file__).parent / "schema.sql").read_text())
+    _migrate(con)
     con.close()
 
 

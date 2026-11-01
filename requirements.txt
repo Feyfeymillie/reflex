@@ -4,3 +4,4 @@ fastapi
 uvicorn[standard]
 jinja2
 psutil
+argon2-cffi

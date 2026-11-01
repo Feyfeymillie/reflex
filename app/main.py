@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import child, db, epds, mchat, newborn, pregnancy as preg
+from . import auth, auth_routes, child, db, epds, mchat, pregnancy as preg
 
 HERE = Path(__file__).resolve().parent
 WEB = Path(os.environ.get("REFLEX_WEB", HERE / "web"))
@@ -21,9 +22,13 @@ STARTED = time.time()
 CONSENT_TEXT_VERSION = "sw-care-v0.1"
 MODULES = ("pregnancy", "postnatal_mh", "child_dev")
 
-app = FastAPI(title="RefleX hub", docs_url=None, redoc_url=None)
+app = FastAPI(title="RefleX hub", docs_url=None, redoc_url=None, openapi_url=None)  # no public API map
 db.init()
 MODEL = preg.Model()
+# Staff sign-in routes, then the gate. AuthMiddleware protects every /api/ path by default (see app/auth.py);
+# it must be added here so it wraps the clinical routes defined below as well as the auth routes.
+app.include_router(auth_routes.router)
+app.add_middleware(auth.AuthMiddleware)
 
 
 class ApiError(Exception):
@@ -81,9 +86,10 @@ def _person(con, pid, role=None):
 def _record_consent(con, subject, given_by, module, purposes):
     ts = db.now()
     for purpose in purposes:
-        con.execute("INSERT INTO consent VALUES (?,?,?,?,?,?,?,?,?)",
+        con.execute("""INSERT INTO consent (consent_id, subject_person_id, given_by_person_id, module, purpose, status,
+                       method, consent_text_version, recorded_at, recorded_by_staff_id) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     (db.new_id(), subject, given_by, module, purpose, "granted",
-                     "verbal_chw_witnessed", CONSENT_TEXT_VERSION, ts))
+                     "verbal_chw_witnessed", CONSENT_TEXT_VERSION, ts, auth.current_staff_id()))
 
 
 def _consent_purposes(c):
@@ -115,9 +121,10 @@ def _new_mother(con, name, age, village, ward, phone, phone_owner, dob=None):
     con.execute("INSERT INTO household (household_id, village, ward_code, hub_id, created_at) VALUES (?,?,?,?,?)",
                 (hh, (village or "").strip() or None, (ward or "").strip() or None, db.HUB_ID, ts))
     con.execute("""INSERT INTO person (person_id, household_id, role, full_name, phone_msisdn, phone_owner,
-                   date_of_birth, dob_estimated, sex, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                   date_of_birth, dob_estimated, sex, created_at, created_by_staff_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (pid, hh, "mother", name, (phone or "").strip() or None, phone_owner if phone_owner in
-                 ("self", "husband", "relative", "neighbour", "none") else None, dob, estimated, "female", ts))
+                 ("self", "husband", "relative", "neighbour", "none") else None, dob, estimated, "female", ts,
+                 auth.current_staff_id()))
     return pid
 
 
@@ -144,8 +151,8 @@ def _add_checkin(con, pid, checkin):
 
     when = _iso(checkin.get("date"))
     enc, aid, ts = db.new_id(), db.new_id(), db.now()
-    con.execute("""INSERT INTO encounter (encounter_id, person_id, pregnancy_id, module, started_at, ended_at, completed)
-                   VALUES (?,?,?,?,?,?,1)""", (enc, pid, pr["pregnancy_id"], "pregnancy", when, ts))
+    con.execute("""INSERT INTO encounter (encounter_id, person_id, pregnancy_id, module, started_at, ended_at, completed, staff_id)
+                   VALUES (?,?,?,?,?,?,1,?)""", (enc, pid, pr["pregnancy_id"], "pregnancy", when, ts, auth.current_staff_id()))
     obs = [(c, clean[c]) for c in preg.Q if clean.get(c) is not None] + [(c, 1) for c in clean["danger_signs"]]
     if len(checkin.get("ultrasound") or "") > 3_000_000:
         raise ApiError(413, "Picha ni kubwa mno (zaidi ya 2 MB). / Image too large (over 2 MB).")
@@ -308,7 +315,8 @@ async def review(aid: str, request: Request):
             final = b["finalBand"]
         ts = db.now()
         con.execute("BEGIN")
-        con.execute("INSERT INTO review VALUES (?,?,?,?,?,?)", (db.new_id(), aid, decision, final, reason, ts))
+        con.execute("""INSERT INTO review (review_id, assessment_id, decision, final_band, reason, reviewed_at, reviewed_by_staff_id)
+                       VALUES (?,?,?,?,?,?,?)""", (db.new_id(), aid, decision, final, reason, ts, auth.current_staff_id()))
         if final in ("high", "urgent"):
             _ensure_referral(con, aid, final, ts)
         con.execute("COMMIT")
@@ -323,7 +331,8 @@ async def referral_status(aid: str, request: Request):
     if b.get("status") not in ("created", "sent", "acknowledged", "attended", "lost"):
         raise ApiError(422, "Hali si sahihi. / Invalid status.")
     con = db.connect()
-    con.execute("UPDATE referral SET status=?, status_updated_at=? WHERE assessment_id=?", (b["status"], db.now(), aid))
+    con.execute("UPDATE referral SET status=?, status_updated_at=?, status_updated_by_staff_id=? WHERE assessment_id=?",
+                (b["status"], db.now(), auth.current_staff_id(), aid))
     con.close()
     return {"ok": True}
 
@@ -379,11 +388,14 @@ def _record_birth(con, pid, b):
         kid = db.new_id()
         name = (b.get("babyName") or "").strip() or f"Mtoto wa {m['full_name']}"
         con.execute("""INSERT INTO person (person_id, household_id, role, full_name, date_of_birth, dob_estimated, sex,
-                       mother_person_id, gestation_at_birth_weeks, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                       mother_person_id, gestation_at_birth_weeks, created_at, created_by_staff_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                     (kid, m["household_id"], "child", name, when, 0,
                      b.get("babySex") if b.get("babySex") in ("female", "male") else None, pid, ga, ts))
         if not newborn.is_empty(nb):
             _save_newborn(con, kid, nb, preg_id, place, ts)
+                     b.get("babySex") if b.get("babySex") in ("female", "male") else None, pid, ga, ts,
+                     auth.current_staff_id()))
     return kid
 
 
@@ -484,8 +496,9 @@ async def epds_screen(pid: str, request: Request):
                     "possibleCutoff": epds.POSSIBLE, "probableCutoff": epds.PROBABLE}
         enc, aid, ts = db.new_id(), db.new_id(), db.now()
         con.execute("BEGIN")
-        con.execute("""INSERT INTO encounter (encounter_id, person_id, pregnancy_id, module, started_at, ended_at, completed)
-                       VALUES (?,?,?,?,?,?,1)""", (enc, pid, pr["pregnancy_id"] if pr else None, "postnatal_mh", ts, ts))
+        con.execute("""INSERT INTO encounter (encounter_id, person_id, pregnancy_id, module, started_at, ended_at, completed, staff_id)
+                       VALUES (?,?,?,?,?,?,1,?)""", (enc, pid, pr["pregnancy_id"] if pr else None, "postnatal_mh", ts, ts,
+                                                     auth.current_staff_id()))
         for code, v in clean.items():
             con.execute("INSERT INTO observation VALUES (?,?,?,?,?,?)", (db.new_id(), enc, code, str(v), "self_report", ts))
         con.execute("""INSERT INTO assessment (assessment_id, person_id, pregnancy_id, encounter_id, module, model_version, score,
@@ -610,8 +623,8 @@ async def milestones(cid: str, request: Request):
         g = child.guidance(months, answers, bool(b.get("lostSkill")), _newborn_json(con, k)["watchClosely"])
         enc, ts = db.new_id(), db.now()
         con.execute("BEGIN")
-        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed)
-                       VALUES (?,?,?,?,?,1)""", (enc, cid, "child_dev", ts, ts))
+        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed, staff_id)
+                       VALUES (?,?,?,?,?,1,?)""", (enc, cid, "child_dev", ts, ts, auth.current_staff_id()))
         for code, v in answers.items():
             con.execute("INSERT INTO observation VALUES (?,?,?,?,?,?)", (db.new_id(), enc, code, v, "parent_report", ts))
         if b.get("lostSkill"):
@@ -680,8 +693,8 @@ async def mchat_screen(cid: str, request: Request):
         analysis = {"ageMonths": months, "riskItems": r["riskItems"], "actionSw": r["action_sw"], "actionEn": r["action_en"]}
         enc, aid, ts = db.new_id(), db.new_id(), db.now()
         con.execute("BEGIN")
-        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed)
-                       VALUES (?,?,?,?,?,1)""", (enc, cid, "child_mchat", ts, ts))
+        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed, staff_id)
+                       VALUES (?,?,?,?,?,1,?)""", (enc, cid, "child_mchat", ts, ts, auth.current_staff_id()))
         for code, v in clean.items():
             con.execute("INSERT INTO observation VALUES (?,?,?,?,?,?)", (db.new_id(), enc, code, v, "parent_report", ts))
         con.execute("""INSERT INTO assessment (assessment_id, person_id, encounter_id, module, model_version, score, band,
@@ -720,8 +733,8 @@ async def play_task(cid: str, request: Request):
         _person(con, cid, "child")
         enc, ts = db.new_id(), db.now()
         con.execute("BEGIN")
-        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed)
-                       VALUES (?,?,?,?,?,1)""", (enc, cid, "child_play", ts, ts))
+        con.execute("""INSERT INTO encounter (encounter_id, person_id, module, started_at, ended_at, completed, staff_id)
+                       VALUES (?,?,?,?,?,1,?)""", (enc, cid, "child_play", ts, ts, auth.current_staff_id()))
         for code, v in (("PLAY_TASK", b["task"]), ("PLAY_ACCURACY", acc), ("PLAY_SECONDS", secs),
                         ("PLAY_ASSISTANCE", b["assistance"]), ("PLAY_CAUTION", "1" if b.get("caution") else "0"),
                         ("PLAY_NOTE", (b.get("note") or "")[:300])):

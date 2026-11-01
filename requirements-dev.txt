@@ -1,0 +1,4 @@
+# Only needed on a laptop to run the automated tests. Not needed on the Raspberry Pi.
+-r requirements.txt
+pytest
+httpx

@@ -3,11 +3,12 @@ import {
   Outlet,
   Link,
   createRootRouteWithContext,
+  redirect,
   useRouter,
 } from "@tanstack/react-router";
 import { Toaster } from "sonner";
+import { ensureUser } from "@/lib/auth";
 import { t, useLang } from "@/lib/i18n";
-
 
 function NotFoundComponent() {
   useLang();
@@ -69,6 +70,19 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // Every page except /login needs a signed-in account. This is a convenience for the screens only: the hub checks the
+  // session and the role again on every API call, so skipping this guard would still show no patient data.
+  beforeLoad: async ({ location }) => {
+    const path = location.pathname;
+    if (path === "/login") return;
+    const user = await ensureUser();
+    if (!user) throw redirect({ to: "/login", search: { next: location.href } });
+    if (user.mustChangePassword && path !== "/account") throw redirect({ to: "/account" });
+    const isAdminArea = path === "/admin" || path.startsWith("/admin/");
+    if (user.role === "admin" && !isAdminArea && path !== "/account")
+      throw redirect({ to: "/admin/staff" });
+    if (user.role !== "admin" && isAdminArea) throw redirect({ to: "/" });
+  },
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
